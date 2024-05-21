@@ -638,29 +638,20 @@ Void TAppEncTop::xInitLib(Bool isFieldCoding)
  */
 Void TAppEncTop::encode()
 {
+  // system("py F:\\Users\\Admin\\Documents\\GitHub\\hevc_swapper\\swapper.py -c F:\\Users\\Admin\\Documents\\GitHub\\hevc_swapper\\RaceHorses.cfg -o F:\\Users\\Admin\\Documents\\GitHub\\hevc_swapper\\newhm.yuv");
   fstream bitstreamFile(m_bitstreamFileName.c_str(), fstream::binary | fstream::out);
   if (!bitstreamFile)
   {
     fprintf(stderr, "\nfailed to open bitstream file `%s' for writing\n", m_bitstreamFileName.c_str());
     exit(EXIT_FAILURE);
   }
-
-  TComPicYuv*       pcPicYuvOrg = new TComPicYuv;
-  TComPicYuv*       pcPicYuvRec = NULL;
-
-#if JVET_X0048_X0103_FILM_GRAIN
-  TComPicYuv* m_filteredOrgPicForFG;
-  if (m_fgcSEIAnalysisEnabled && m_fgcSEIExternalDenoised.empty())
-  {
-    m_filteredOrgPicForFG = new TComPicYuv;
-    m_filteredOrgPicForFG->create(m_sourceWidth, m_sourceHeight, m_chromaFormatIDC, m_uiMaxCUWidth, m_uiMaxCUHeight, m_uiMaxTotalCUDepth, true);
-  }
-  else
-  {
-    m_filteredOrgPicForFG = NULL;
-  }
-#endif
-
+  int                 ALLiNumEncoded[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+  TComPicYuv*         ALLpcPicYuvOrg[9] = {new TComPicYuv, new TComPicYuv, new TComPicYuv, new TComPicYuv,new TComPicYuv,new TComPicYuv,new TComPicYuv,new TComPicYuv,new TComPicYuv};
+  TComPicYuv*         ALLm_filteredOrgPicForFG[9] = {new TComPicYuv, new TComPicYuv, new TComPicYuv, new TComPicYuv,new TComPicYuv,new TComPicYuv,new TComPicYuv,new TComPicYuv,new TComPicYuv};
+  TComPicYuv*         pcPicYuvRec = NULL;
+  TComPicYuv          ALLcPicYuvTrueOrg[9];
+  list<AccessUnit>    ALLoutputAccessUnits[9];
+  vector<TComPicYuv*> ALLPicYuvRec = {new TComPicYuv, new TComPicYuv, new TComPicYuv, new TComPicYuv,new TComPicYuv,new TComPicYuv,new TComPicYuv,new TComPicYuv,new TComPicYuv};//{NULL, NULL,NULL, NULL,NULL, NULL,NULL, NULL,NULL};
   // initialize internal class & member variables
   xInitLibCfg();
   xCreateLib();
@@ -679,16 +670,18 @@ Void TAppEncTop::encode()
 
   TComPicYuv cPicYuvTrueOrg;
 
-  // allocate original YUV buffer
-  if( m_isField )
+  // allocate YUV buffers
+  if(m_isField)
   {
-    pcPicYuvOrg->create  ( m_sourceWidth, m_sourceHeightOrg, m_chromaFormatIDC, m_uiMaxCUWidth, m_uiMaxCUHeight, m_uiMaxTotalCUDepth, true );
-    cPicYuvTrueOrg.create(m_sourceWidth, m_sourceHeightOrg, m_chromaFormatIDC, m_uiMaxCUWidth, m_uiMaxCUHeight, m_uiMaxTotalCUDepth, true);
+    throw logic_error("m_field is not supported in TAppEncTop::encode");
   }
-  else
+
+  for (int i = 0; i < 9; i++)
   {
-    pcPicYuvOrg->create  ( m_sourceWidth, m_sourceHeight, m_chromaFormatIDC, m_uiMaxCUWidth, m_uiMaxCUHeight, m_uiMaxTotalCUDepth, true );
-    cPicYuvTrueOrg.create(m_sourceWidth, m_sourceHeight, m_chromaFormatIDC, m_uiMaxCUWidth, m_uiMaxCUHeight, m_uiMaxTotalCUDepth, true );
+    ALLpcPicYuvOrg[i] -> create ( m_sourceWidth, m_sourceHeight, m_chromaFormatIDC, m_uiMaxCUWidth, m_uiMaxCUHeight, m_uiMaxTotalCUDepth, true );
+    ALLcPicYuvTrueOrg[i]. create ( m_sourceWidth, m_sourceHeight, m_chromaFormatIDC, m_uiMaxCUWidth, m_uiMaxCUHeight, m_uiMaxTotalCUDepth, true );
+    ALLm_filteredOrgPicForFG[i] -> create ( m_sourceWidth, m_sourceHeight, m_chromaFormatIDC, m_uiMaxCUWidth, m_uiMaxCUHeight, m_uiMaxTotalCUDepth, true );
+    ALLPicYuvRec[i] -> create ( m_sourceWidth, m_sourceHeight, m_chromaFormatIDC, m_uiMaxCUWidth, m_uiMaxCUHeight, m_uiMaxTotalCUDepth, true );
   }
 
 #if EXTENSION_360_VIDEO
@@ -736,43 +729,59 @@ Void TAppEncTop::encode()
 #endif
   }
 #endif
-  while ( !bEos )
+  Bool  bEosNEW = false;
+  int m_iFrameRcvdNEW = 0;
+  while ( !bEosNEW)
   {
     // get buffers
     xGetBuffer(pcPicYuvRec);
-
-    // read input YUV file
 #if EXTENSION_360_VIDEO
-    if (ext360.isEnabled())
-    {
-      ext360.read(m_cTVideoIOYuvInputFile, *pcPicYuvOrg, cPicYuvTrueOrg, ipCSC);
-    }
-    else
-    {
-      m_cTVideoIOYuvInputFile.read( pcPicYuvOrg, &cPicYuvTrueOrg, ipCSC, m_sourcePadding, m_InputChromaFormatIDC, m_bClipInputVideoToRec709Range );
-    }
-#else
-    m_cTVideoIOYuvInputFile.read( pcPicYuvOrg, &cPicYuvTrueOrg, ipCSC, m_sourcePadding, m_InputChromaFormatIDC, m_bClipInputVideoToRec709Range );
+  throw logic_error("EXTENSION_360_VIDEO is not supported in TAppEncTop::encode");
 #endif
 
+    // read input YUV file
+    m_cTVideoIOYuvInputFile.read( ALLpcPicYuvOrg[m_iFrameRcvdNEW], &ALLcPicYuvTrueOrg[m_iFrameRcvdNEW], ipCSC, m_sourcePadding, m_InputChromaFormatIDC, m_bClipInputVideoToRec709Range );
 #if JVET_X0048_X0103_FILM_GRAIN
     if (m_fgcSEIAnalysisEnabled && m_fgcSEIExternalDenoised.empty())
     {
-      pcPicYuvOrg->copyToPic(m_filteredOrgPicForFG);
-      m_temporalFilterForFG.filter(m_filteredOrgPicForFG, m_iFrameRcvd);
+      ALLpcPicYuvOrg[m_iFrameRcvdNEW]->copyToPic(ALLm_filteredOrgPicForFG[m_iFrameRcvdNEW]);
+      m_temporalFilterForFG.filter(ALLm_filteredOrgPicForFG[m_iFrameRcvdNEW], m_iFrameRcvdNEW);
     }
 #endif
-
 #if JVET_Y0077_BIM
     if ( m_gopBasedTemporalFilterEnabled || m_bimEnabled )
 #else
     if (m_gopBasedTemporalFilterEnabled)
 #endif
     {
-      temporalFilter.filter(pcPicYuvOrg, m_iFrameRcvd);
+      temporalFilter.filter(ALLpcPicYuvOrg[m_iFrameRcvdNEW], m_iFrameRcvdNEW);
     }
 
     // increase number of received frames
+    m_iFrameRcvdNEW++;
+
+    bEosNEW = (m_isField && (m_iFrameRcvdNEW == (m_framesToBeEncoded >> 1) )) || ( !m_isField && (m_iFrameRcvdNEW == m_framesToBeEncoded) );
+
+  }
+  while ( !bEos )
+  {
+    int swapper_trick = m_iFrameRcvd;
+    if (m_swap15)
+    {
+      if (m_iFrameRcvd == 0)
+      {
+        swapper_trick = 4;
+      }
+      else if (m_iFrameRcvd == 4)
+      {
+        swapper_trick = 0;
+      }
+    }
+    TComPicYuv* TEMPpcPicYuvOrg = ALLpcPicYuvOrg[swapper_trick];
+    TComPicYuv* TEMPcPicYuvTrueOrg = &ALLcPicYuvTrueOrg[swapper_trick];
+    TComPicYuv* TEMPm_filteredOrgPicForFG = ALLm_filteredOrgPicForFG[swapper_trick];
+
+     // increase number of received frames
     m_iFrameRcvd++;
 
     bEos = (m_isField && (m_iFrameRcvd == (m_framesToBeEncoded >> 1) )) || ( !m_isField && (m_iFrameRcvd == m_framesToBeEncoded) );
@@ -790,12 +799,12 @@ Void TAppEncTop::encode()
     // call encoding function for one frame
     if ( m_isField )
     {
-      m_cTEncTop.encode( bEos, flush ? 0 : pcPicYuvOrg, flush ? 0 : &cPicYuvTrueOrg, ipCSC, snrCSC, m_cListPicYuvRec, outputAccessUnits, iNumEncoded, m_isTopFieldFirst );
+      m_cTEncTop.encode( bEos, flush ? 0 : TEMPpcPicYuvOrg, flush ? 0 : TEMPcPicYuvTrueOrg, ipCSC, snrCSC, m_cListPicYuvRec, outputAccessUnits, iNumEncoded, m_isTopFieldFirst );
     }
     else
     {
 #if JVET_X0048_X0103_FILM_GRAIN
-      m_cTEncTop.encode( bEos, flush ? 0 : pcPicYuvOrg, flush ? 0 : &cPicYuvTrueOrg, flush ? 0 : m_filteredOrgPicForFG, ipCSC, snrCSC, m_cListPicYuvRec, outputAccessUnits, iNumEncoded);
+      m_cTEncTop.encode( bEos, flush ? 0 : TEMPpcPicYuvOrg, flush ? 0 : TEMPcPicYuvTrueOrg, flush ? 0 : TEMPm_filteredOrgPicForFG, ipCSC, snrCSC, m_cListPicYuvRec, outputAccessUnits, iNumEncoded);
 #else
       m_cTEncTop.encode( bEos, flush ? 0 : pcPicYuvOrg, flush ? 0 : &cPicYuvTrueOrg, ipCSC, snrCSC, m_cListPicYuvRec, outputAccessUnits, iNumEncoded );
 #endif
@@ -804,43 +813,71 @@ Void TAppEncTop::encode()
 #if SHUTTER_INTERVAL_SEI_PROCESSING
     if (m_ShutterFilterEnable && !m_shutterIntervalPreFileName.empty())
     {
-      m_cTVideoIOYuvSIIPreFile.write(pcPicYuvOrg, ipCSC, m_confWinLeft, m_confWinRight, m_confWinTop, m_confWinBottom,
+      m_cTVideoIOYuvSIIPreFile.write(TEMPpcPicYuvOrg, ipCSC, m_confWinLeft, m_confWinRight, m_confWinTop, m_confWinBottom,
         NUM_CHROMA_FORMAT, m_bClipOutputVideoToRec709Range);
     }
 #endif
+    ALLiNumEncoded[m_iFrameRcvd-1] = iNumEncoded;
+    ALLoutputAccessUnits[m_iFrameRcvd-1] = outputAccessUnits;
+    (*(m_cListPicYuvRec.begin()))->copyToPic(ALLPicYuvRec[m_iFrameRcvd-1]);
 
-    // write bistream to file if necessary
-    if ( iNumEncoded > 0 )
-    {
-      xWriteOutput(bitstreamFile, iNumEncoded, outputAccessUnits);
-      outputAccessUnits.clear();
-    }
     // temporally skip frames
     if( m_temporalSubsampleRatio > 1 )
     {
       m_cTVideoIOYuvInputFile.skipFrames(m_temporalSubsampleRatio-1, m_inputFileWidth, m_inputFileHeight, m_InputChromaFormatIDC);
     }
   }
-
+  for (int i = 0; i < 9; i++)
+  {
+    int swapper_trick = i;
+    if (m_swap15)
+    {
+      if (i == 0)
+      {
+        swapper_trick = 4;
+      }
+      else if (i == 4)
+      {
+        swapper_trick = 0;
+      }
+    }
+    if ( ALLiNumEncoded[swapper_trick] > 0 )
+    {
+      xWriteOutput(bitstreamFile, ALLiNumEncoded[swapper_trick], ALLoutputAccessUnits[swapper_trick], ALLPicYuvRec[swapper_trick]);
+    }
+  }
   m_cTEncTop.printSummary(m_isField);
+  for (int i = 0; i < 9; i++)
+  {
+    // delete original YUV buffer
+    ALLpcPicYuvOrg[i]->destroy();
+    delete ALLpcPicYuvOrg[i];
+  }
 
-  // delete original YUV buffer
-  pcPicYuvOrg->destroy();
-  delete pcPicYuvOrg;
-  pcPicYuvOrg = NULL;
+  for (int i = 0; i < 9; i++)
+  {
+    // delete original YUV buffer
+    ALLPicYuvRec[i]->destroy();
+    delete ALLPicYuvRec[i];
+  }
 
 #if JVET_X0048_X0103_FILM_GRAIN
   if (m_fgcSEIAnalysisEnabled && m_fgcSEIExternalDenoised.empty())
   {
-    m_filteredOrgPicForFG->destroy();
-    delete m_filteredOrgPicForFG;
-    m_filteredOrgPicForFG = NULL;
+    for (int i = 0; i < 9; i++)
+    {
+      ALLm_filteredOrgPicForFG[i]->destroy();
+      delete ALLm_filteredOrgPicForFG[i];
+    }
   }
 #endif
 
   // delete used buffers in encoder class
   m_cTEncTop.deletePicBuffer();
-  cPicYuvTrueOrg.destroy();
+    for (int i = 0; i < 9; i++)
+    {
+      ALLcPicYuvTrueOrg[i].destroy();
+    }
 
   // delete buffers & classes
   xDeleteBuffer();
@@ -902,67 +939,23 @@ Void TAppEncTop::xDeleteBuffer( )
   \param iNumEncoded    number of encoded frames
   \param accessUnits    list of access units to be written
  */
-Void TAppEncTop::xWriteOutput(std::ostream& bitstreamFile, Int iNumEncoded, const std::list<AccessUnit>& accessUnits)
+Void TAppEncTop::xWriteOutput(std::ostream& bitstreamFile, Int iNumEncoded, const std::list<AccessUnit>& accessUnits, TComPicYuv* PicYuvRec)
 {
-  const InputColourSpaceConversion ipCSC = (!m_outputInternalColourSpace) ? m_inputColourSpaceConvert : IPCOLOURSPACE_UNCHANGED;
-
   if (m_isField)
   {
-    //Reinterlace fields
-    Int i;
-    TComList<TComPicYuv*>::iterator iterPicYuvRec = m_cListPicYuvRec.end();
-    list<AccessUnit>::const_iterator iterBitstream = accessUnits.begin();
-
-    for ( i = 0; i < iNumEncoded; i++ )
-    {
-      --iterPicYuvRec;
-    }
-
-    for ( i = 0; i < iNumEncoded/2; i++ )
-    {
-      TComPicYuv*  pcPicYuvRecTop  = *(iterPicYuvRec++);
-      TComPicYuv*  pcPicYuvRecBottom  = *(iterPicYuvRec++);
-
-      if (!m_reconFileName.empty())
-      {
-        m_cTVideoIOYuvReconFile.write( pcPicYuvRecTop, pcPicYuvRecBottom, ipCSC, m_confWinLeft, m_confWinRight, m_confWinTop, m_confWinBottom, NUM_CHROMA_FORMAT, m_isTopFieldFirst );
-      }
-
-      const AccessUnit& auTop = *(iterBitstream++);
-      const vector<UInt>& statsTop = writeAnnexB(bitstreamFile, auTop);
-      rateStatsAccum(auTop, statsTop);
-
-      const AccessUnit& auBottom = *(iterBitstream++);
-      const vector<UInt>& statsBottom = writeAnnexB(bitstreamFile, auBottom);
-      rateStatsAccum(auBottom, statsBottom);
-    }
+    throw logic_error("m_field is not supported in TAppEncTop::xWriteOutput");
   }
-  else
+  const InputColourSpaceConversion ipCSC = (!m_outputInternalColourSpace) ? m_inputColourSpaceConvert : IPCOLOURSPACE_UNCHANGED;
+  list<AccessUnit>::const_iterator iterBitstream = accessUnits.begin();
+  TComPicYuv* pcPicYuvRec = PicYuvRec;
+  if (!m_reconFileName.empty())
   {
-    Int i;
-
-    TComList<TComPicYuv*>::iterator iterPicYuvRec = m_cListPicYuvRec.end();
-    list<AccessUnit>::const_iterator iterBitstream = accessUnits.begin();
-
-    for ( i = 0; i < iNumEncoded; i++ )
-    {
-      --iterPicYuvRec;
-    }
-
-    for ( i = 0; i < iNumEncoded; i++ )
-    {
-      TComPicYuv*  pcPicYuvRec  = *(iterPicYuvRec++);
-      if (!m_reconFileName.empty())
-      {
-        m_cTVideoIOYuvReconFile.write( pcPicYuvRec, ipCSC, m_confWinLeft, m_confWinRight, m_confWinTop, m_confWinBottom,
-            NUM_CHROMA_FORMAT, m_bClipOutputVideoToRec709Range  );
-      }
-
-      const AccessUnit& au = *(iterBitstream++);
-      const vector<UInt>& stats = writeAnnexB(bitstreamFile, au);
-      rateStatsAccum(au, stats);
-    }
+    m_cTVideoIOYuvReconFile.write( pcPicYuvRec, ipCSC, m_confWinLeft, m_confWinRight, m_confWinTop, m_confWinBottom,
+        NUM_CHROMA_FORMAT, m_bClipOutputVideoToRec709Range  );
   }
+  const AccessUnit& au = *(iterBitstream++);
+  const vector<UInt>& stats = writeAnnexB(bitstreamFile, au);
+  rateStatsAccum(au, stats);
 }
 
 /**
